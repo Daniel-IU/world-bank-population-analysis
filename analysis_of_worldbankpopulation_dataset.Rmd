@@ -1,0 +1,174 @@
+
+---
+title: "Analysis of world bank population data set"
+author: "Uyiosa Igbinedion"
+date: '2022-06-13'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+<br><br>
+
+## Introduction and data set overview 
+
+The data set is from the dplyr package and shows data about world population from the world bank 
+
+The data set has **`r nrow(world_bank_pop)`** rows and **`r ncol(world_bank_pop)`** columns given as: 
+
+1. **country**
+    * Three letter country code
+
+1. **indicator**
+    * Indicator name: SP.POP.GROW = population growth, SP.POP.TOTL = total population, SP.URB.GROW = urban population growth, SP.URB.TOTL = total urban population
+
+1. **2000-2018**
+    * Value for each year
+
+
+<br><br><br>
+
+
+## Data transformations
+
+The following transformations would be done on the data to prepare it for analysis
+
+
+1. Select a subset of the data where `indicator == SP.POP.TOTL | indicator == SP.URB.TOTL`
+1. Change the names used in the indicator variable
+1. change variable names to title case 
+1. Change from wide to long format 
+1. Augment data set with additional variables e.g. *Continent*, *Region*, *Income group*, *Actual country name*
+1. Drop missing values
+1. Create an *others* country category to avoid loosing data 
+
+<br><br><br>
+
+
+```{r echo=FALSE}
+knitr::kable(head(world_bank_pop,5),
+             caption = 'First 5 rows of the world bank population dataset')
+```
+
+
+
+<br><br><br><br>
+
+
+
+### Transformation 1 : Select subset of the data
+
+```{r }
+#Get only urban and Total population
+world_bank_pop_2= filter(world_bank_pop,indicator == "SP.URB.TOTL" | indicator=="SP.POP.TOTL")
+
+```
+
+
+
+<br><br><br><br>
+
+
+
+### Transformation 2-3 : Change the names used in the indicator variable and title case the variable names 
+
+```{r}
+#Change the indicator names to something more understandable
+world_bank_pop_2 <- world_bank_pop_2 %>% 
+  mutate(indicator= str_replace(indicator,'SP.URB.TOTL','Urban Population'))
+
+world_bank_pop_2 <- world_bank_pop_2 %>% 
+  mutate(indicator= str_replace(indicator,'SP.POP.TOTL','Total Population'))
+
+#Change the variable names to title case (capitalize the first letter of the word)
+world_bank_pop_2 <- world_bank_pop_2 %>% rename_with(.,str_to_title)
+
+```
+
+
+
+<br><br><br><br>
+
+
+
+### Transformation 4 : Change from wide to long format
+
+```{r}
+#change from wide to long format
+world_bank_pop_2 <- world_bank_pop_2 %>% gather(`2000`:`2017`,key="Year",value = "Population")
+
+```
+
+
+
+<br><br><br><br>
+
+
+
+### Transformation 5 : Augment data set with additional variables
+
+Web scraping of the [World bank](https://wits.worldbank.org/countryprofile/metadata/en/country/all) and [World Population review ](https://worldpopulationreview.com/country-rankings/list-of-countries-by-continent) sites was done in python to augment the data set with additional variables (see untitled2.ipynb)
+
+
+
+```{r message=FALSE, warning=FALSE}
+#read in additional python-processed data (continent,region,income group,country name)
+CountryCode <- read_csv("C:\\Users\\Igbinedion Uyiosa\\Documents\\Uyi\\Data Science\\Datasets\\countryCode.csv")
+
+#joining the two tables into one 
+world_bank_pop_3 <-  left_join(CountryCode,world_bank_pop_2, by=c('Country ISO3'='Country'))
+
+```
+
+
+
+<br><br><br><br>
+
+
+
+### Transformation 6 : Drop missing values
+
+```{r}
+#dropping reviewed NA values (1st output --pop4)
+world_bank_pop_4 <- world_bank_pop_3 %>% drop_na(Population)
+
+```
+
+
+
+<br><br><br><br>
+
+
+
+### Transformation 7 : Create an '*others*' country category
+
+```{r message=FALSE, warning=FALSE}
+Total_World_population <- as_tibble(world_bank_pop %>% filter(country=='WLD',indicator=='SP.POP.TOTL') %>% select(-country,-indicator) %>% t)
+Total_Urban_population <- as_tibble(world_bank_pop %>% filter(country=='WLD',indicator=='SP.URB.TOTL') %>% select(-country,-indicator) %>% t)
+
+Known_World_population <-world_bank_pop_4 %>% group_by(Year) %>% filter(Indicator=='Total Population') %>% summarise(knownPop= sum(Population)) %>% select(knownPop)
+
+Known_Urban_population <-world_bank_pop_4 %>% group_by(Year) %>% filter(Indicator=='Urban Population') %>% summarise(knownPop= sum(Population)) %>% select(knownPop)
+
+totalPopDiff <- Total_World_population - Known_World_population
+UrbanPopDiff <- Total_Urban_population - Known_Urban_population
+
+totalPopDiff <- totalPopDiff  %>% mutate(Country_Name = 'Others',Indicator ='Total Population',Year=2000:2017,Country_ISO3='OTH', Region = NA, Continent = NA,Income_Group = NA) %>% rename('Population'='V1') 
+
+UrbanPopDiff <- UrbanPopDiff  %>% mutate(Country_Name = 'Others',Indicator ='Urban Population',Year=2000:2017,Country_ISO3='OTH', Region = NA, Continent = NA,Income_Group = NA) %>%rename('Population'='V1')   
+
+```
+
+<br><br><br><br>
+
+## Visualisations 
+
+Visualizations were done using **Tableau Public**
+
+<br><br><br><br><br><br><br><br>
